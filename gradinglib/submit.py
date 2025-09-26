@@ -1,34 +1,23 @@
-import gspread
-from google.oauth2.service_account import Credentials
-import datetime
+import requests # requests 라이브러리 사용
+import json
 
-def save_result_to_sheet(student_id, name, score, feedback, sheet_name, creds_json_path):
-    """채점 결과를 지정된 Google Sheet에 저장합니다."""
+def save_result_via_appsscript(student_id, name, score, feedback, app_script_url):
+    """채점 결과를 Apps Script 웹 앱으로 전송합니다."""
     try:
-        # 인증 정보 설정
-        scopes = ['https://www.googleapis.com/auth/spreadsheets']
-        creds = Credentials.from_service_account_file(creds_json_path, scopes=scopes)
-        client = gspread.authorize(creds)
+        # 전송할 데이터를 JSON 형식으로 준비
+        payload = {
+            "student_id": student_id,
+            "name": name,
+            "score": score,
+            "feedback": feedback
+        }
+        
+        # POST 요청 보내기
+        response = requests.post(app_script_url, data=json.dumps(payload), headers={'Content-Type': 'application/json'})
+        response.raise_for_status() # 오류가 있으면 예외 발생
+        
+        # 응답 결과 반환
+        return f"Google Sheet에 결과가 전송되었습니다. (응답: {response.json()})"
 
-        # Google Sheet 열기
-        sheet = client.open(sheet_name).sheet1
-
-        # 헤더가 없으면 추가
-        if not sheet.get_all_values():
-            headers = ["Timestamp", "학번", "이름", "점수", "피드백"]
-            sheet.append_row(headers)
-
-        # 새 결과 행 추가
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        new_row = [timestamp, student_id, name, score, feedback]
-        sheet.append_row(new_row)
-
-        sheet_url = f"https://docs.google.com/spreadsheets/d/{sheet.spreadsheet.id}"
-        return f"Google Sheet '{sheet_name}'에 저장되었습니다. URL: {sheet_url}"
-
-    except Exception as e:
-        return f"Google Sheet 저장 중 오류 발생: {e}"
-
-# 기존의 CSV 저장 함수는 필요시 남겨두거나 삭제할 수 있습니다.
-# def save_result(student_id, name, score, feedback, outdir="results"):
-#     ...
+    except requests.exceptions.RequestException as e:
+        return f"Apps Script로 결과 전송 중 오류 발생: {e}"
