@@ -1,16 +1,16 @@
 from .grader import Grader
-from .submit import save_result_to_sheet
+from .submit import save_result_via_appsscript
 
-def grade_exam(student_id, name, answers: dict, sheet_name: str, creds_json_path: str):
+def grade_exam(student_id, name, answers: dict, app_script_url: str):
     """
-    학생 답안을 채점하고 결과를 지정된 Google Sheet에 저장합니다.
+    학생 답안을 채점하고 결과를 Apps Script를 통해 Google Sheet에 저장합니다.
     """
     grader = Grader()
     score, feedback = grader.grade(answers)
     
-    # Google Sheets에 결과 저장
-    result_message = save_result_to_sheet(
-        student_id, name, score, feedback, sheet_name, creds_json_path
+    # Apps Script로 결과 전송
+    result_message = save_result_via_appsscript(
+        student_id, name, score, feedback, app_script_url
     )
     
     return score, feedback, result_message
