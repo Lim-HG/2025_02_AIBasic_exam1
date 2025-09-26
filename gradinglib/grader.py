@@ -1,7 +1,7 @@
 import json
 import os
-import numpy as pd
-import pandas as pd # pandas도 import 합니다.
+import numpy as np
+import pandas as pd 
 
 class Grader:
     def __init__(self):
