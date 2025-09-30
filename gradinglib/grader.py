@@ -34,5 +34,5 @@ class Grader:
                 score += 1
                 feedback.append(f"{qid}: 정답 ✅")
             else:
-                feedback.append(f"{qid}: 오답 ❌ (정답: {correct})")
+                feedback.append(f"{qid}: 오답 ❌")
         return score, "\n".join(feedback)
