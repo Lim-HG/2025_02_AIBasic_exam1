@@ -31,7 +31,7 @@ class Grader:
 
             # 4. 최종 비교
             if student_answer == correct:
-                score += 1
+                score += 10
                 feedback.append(f"{qid}: 정답 ✅")
             else:
                 feedback.append(f"{qid}: 오답 ❌")
