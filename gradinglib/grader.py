@@ -15,21 +15,18 @@ class Grader:
         score = 0
         feedback = []
 
-        # 학생이 제출한 답안의 문제 목록을 기준으로 채점을 진행합니다.
         for qid, student_answer in student_answers.items():
-            correct = self.answers.get(qid) # 통합 정답 파일에서 해당 문제의 정답을 찾습니다.
+            correct = self.answers.get(qid)
 
-            # 1. 정답지에 해당 문제가 없는 경우 (예외 처리)
             if correct is None:
                 feedback.append(f"{qid}: 오답 ❌ (채점 기준을 찾을 수 없습니다.)")
                 continue
 
-            # 2. 답안 미제출 또는 코드 오류로 답이 없는 경우
             if student_answer is None:
                 feedback.append(f"{qid}: 오답 ❌")
                 continue
 
-            # 3. 비교 전, 학생 답안의 타입을 정답 형식(주로 list)으로 변환
+            # 1. 학생 답안의 기본 타입을 list로 통일 (numpy, tuple 등)
             try:
                 if isinstance(student_answer, (np.ndarray, pd.Series)):
                     student_answer = student_answer.tolist()
@@ -41,15 +38,45 @@ class Grader:
                 feedback.append(f"{qid}: 오답 ❌ (답안의 형식이 올바르지 않습니다.)")
                 continue
 
-            # 4. 최종적으로 정답과 비교
+            # 2. --- 핵심 변경 사항 ---
+            # 정답이 상수(숫자, 문자열 등)일 때, 학생 답안이 [정답]이나 [[정답]]처럼
+            # 리스트/튜플로 감싸져 있으면 값을 추출합니다.
             try:
-                if student_answer == correct:
+                # correct가 리스트/튜플이 아닌 단일 값일 때만 이 로직을 실행
+                if not isinstance(correct, (list, tuple)):
+                    # 학생 답안이 1개짜리 리스트/튜플이면 계속해서 껍질을 벗겨냄
+                    while isinstance(student_answer, (list, tuple)) and len(student_answer) == 1:
+                        student_answer = student_answer[0]
+            except Exception:
+                # 이 과정에서 오류 발생 시 원래대로 진행
+                pass
+
+
+            # 3. 최종적으로 정답과 비교
+            try:
+                is_correct = False
+                
+                # 소수점 리스트 비교 (부동소수점 오차 처리)
+                is_float_list = (
+                    isinstance(student_answer, list) and isinstance(correct, list) and
+                    student_answer and correct and
+                    # 리스트의 첫 항목이 float인지 확인하여 소수점 리스트 여부 판단
+                    all(isinstance(item, (float, int)) for item in student_answer) and
+                    all(isinstance(item, (float, int)) for item in correct)
+                )
+
+                if is_float_list:
+                    is_correct = np.allclose(student_answer, correct)
+                else:
+                    # 그 외 모든 경우 (정수, 문자열, 상수 등)
+                    is_correct = (student_answer == correct)
+
+                if is_correct:
                     score += 1
                     feedback.append(f"{qid}: 정답 ✅")
                 else:
-                    feedback.append(f"{qid}: 오답 ❌") # 정답 불일치
+                    feedback.append(f"{qid}: 오답 ❌")
             except Exception:
-                # 비교 연산(==) 자체가 불가능한 경우
                 feedback.append(f"{qid}: 오답 ❌")
 
         return score, "\n".join(feedback)
