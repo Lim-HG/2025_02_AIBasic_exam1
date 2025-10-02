@@ -27,6 +27,7 @@ class Grader:
                 continue
 
             # 1. 학생 답안의 기본 타입을 list로 통일 (numpy, tuple 등)
+            #    이 부분이 conf_mat(numpy 배열)를 list로 바꿔주어 문제를 해결합니다.
             try:
                 if isinstance(student_answer, (np.ndarray, pd.Series)):
                     student_answer = student_answer.tolist()
@@ -38,17 +39,12 @@ class Grader:
                 feedback.append(f"{qid}: 오답 ❌ (답안의 형식이 올바르지 않습니다.)")
                 continue
 
-            # 2. --- 핵심 변경 사항 ---
-            # 정답이 상수(숫자, 문자열 등)일 때, 학생 답안이 [정답]이나 [[정답]]처럼
-            # 리스트/튜플로 감싸져 있으면 값을 추출합니다.
+            # 2. 정답이 상수일 때, 학생 답안이 [정답] 등으로 감싸져 있으면 값을 추출
             try:
-                # correct가 리스트/튜플이 아닌 단일 값일 때만 이 로직을 실행
                 if not isinstance(correct, (list, tuple)):
-                    # 학생 답안이 1개짜리 리스트/튜플이면 계속해서 껍질을 벗겨냄
                     while isinstance(student_answer, (list, tuple)) and len(student_answer) == 1:
                         student_answer = student_answer[0]
             except Exception:
-                # 이 과정에서 오류 발생 시 원래대로 진행
                 pass
 
 
@@ -57,18 +53,22 @@ class Grader:
                 is_correct = False
                 
                 # 소수점 리스트 비교 (부동소수점 오차 처리)
-                is_float_list = (
-                    isinstance(student_answer, list) and isinstance(correct, list) and
-                    student_answer and correct and
-                    # 리스트의 첫 항목이 float인지 확인하여 소수점 리스트 여부 판단
-                    all(isinstance(item, (float, int)) for item in student_answer) and
-                    all(isinstance(item, (float, int)) for item in correct)
-                )
+                is_float_list = False
+                # 정답이 리스트이고 비어있지 않은지 먼저 확인
+                if isinstance(correct, list) and correct:
+                    # 첫번째 아이템을 기준으로 타입 체크 (중첩 리스트 고려)
+                    first_val = correct[0]
+                    if isinstance(first_val, list) and first_val:
+                        first_val = first_val[0]
+                    
+                    # 최종적으로 확인된 첫번째 값이 float이면 소수점 리스트로 판단
+                    if isinstance(first_val, float):
+                        is_float_list = True
 
                 if is_float_list:
                     is_correct = np.allclose(student_answer, correct)
                 else:
-                    # 그 외 모든 경우 (정수, 문자열, 상수 등)
+                    # conf_mat와 같은 정수 리스트는 여기서 비교됨
                     is_correct = (student_answer == correct)
 
                 if is_correct:
