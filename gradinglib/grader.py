@@ -1,52 +1,90 @@
-# gradinglib/grader.py (경로 문제 해결을 위한 수정)
-
 import json
 import os
 import numpy as np
 import pandas as pd
-import sys
 import inspect
+import sys
+from base64 import b64decode
+from Crypto.Cipher import AES
+from Crypto.Util.Padding import unpad
+
+# ----------------------------------------------------
+# ⚠️ 경고: 이 키는 encrypt_answers.py에서 사용한 키와 정확히 일치해야 합니다.
+# ⚠️ 실제 환경에서는 키를 환경 변수에서 로드해야 합니다.
+# ----------------------------------------------------
+SECRET_KEY = b'ThisIsASecretKeyForGrader256Bits' # 32바이트로 수정된 키
+ENCRYPTED_ANSWERS_FILE = "answers.enc"
+
+def decrypt_data(key, file_path):
+    """AES-256 GCM 모드로 암호화된 파일을 복호화하여 JSON 객체를 반환합니다."""
+    try:
+        with open(file_path, 'rb') as f:
+            # Nonce(16) + Tag(16) + Ciphertext 순서대로 데이터 읽기
+            nonce = f.read(16)
+            tag = f.read(16)
+            ciphertext = f.read()
+
+        cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+        
+        # 복호화 및 인증 태그 검증 (검증 실패 시 ValueError 발생)
+        decrypted_data = cipher.decrypt_and_verify(ciphertext, tag)
+        
+        # Padding 제거 및 JSON 로드
+        data = unpad(decrypted_data, AES.block_size).decode('utf-8')
+        return json.loads(data)
+
+    except ValueError:
+        print("❌ Decryption Error: Key or file integrity check failed (Tag mismatch).")
+        return None
+    except Exception as e:
+        print(f"❌ Decryption Error: Failed to read or process encrypted file: {e}")
+        return None
+
 
 class Grader:
     def __init__(self):
-        # 모듈이 설치된 실제 디렉토리를 찾아 answers.json을 로드합니다.
-        # inspect 모듈을 사용하여 현재 모듈의 파일 위치를 더 확실하게 가져옵니다.
         try:
-            # 현재 파일의 실제 경로를 가져옵니다. (설치된 경우에도 작동)
+            # 1. 현재 모듈의 실제 경로를 가져옵니다.
             module_path = os.path.dirname(inspect.getfile(self.__class__))
-            path = os.path.join(module_path, "answers.json")
+            enc_path = os.path.join(module_path, ENCRYPTED_ANSWERS_FILE)
             
-            with open(path, "r", encoding="utf-8") as f:
-                self.answers = json.load(f)
-            self._base_dir = module_path # 정답 파일 로드를 위한 기본 경로 설정
-            print(f"✅ answers.json loaded from: {path}")
+            # 2. 암호화된 파일을 복호화하여 answers 로드
+            self.answers = decrypt_data(SECRET_KEY, enc_path)
+            
+            if self.answers is None:
+                raise Exception("Decryption failed. Using empty answers.")
+
+            self._base_dir = module_path
+            # print(f"✅ Encrypted answers loaded and decrypted from: {enc_path}")
 
         except Exception as e:
-            # 파일 로드 실패 시 디버깅 정보 제공
-            print(f"❌ Initialization Error (answers.json not found): {e}")
-            self.answers = {} # 로드 실패 시 빈 딕셔너리로 초기화
+            # 초기화 오류 발생 시, 복호화 오류일 가능성이 높습니다.
+            print(f"❌ Initialization Error: Decryption or File Load Failed ({e})")
+            self.answers = {}
 
     def _load_correct_answer(self, qid, correct_data):
+        # ... (이후 _load_correct_answer 및 grade 메서드는 이전과 동일합니다.)
         if isinstance(correct_data, str) and correct_data.startswith("FILE:"):
-            file_name = correct_data[5:]  # "FILE:" 문자열 제거
+            file_name = correct_data[5:]
+            base_dir = getattr(self, '_base_dir', None)
             
-            # __init__에서 설정한 패키지 설치 경로를 기본 경로로 사용
-            base_dir = getattr(self, '_base_dir', os.path.dirname(os.path.abspath(__file__)))
+            if not base_dir:
+                try:
+                    base_dir = os.path.dirname(inspect.getfile(self.__class__))
+                except:
+                    return None
+            
             file_path = os.path.join(base_dir, file_name)
             
             try:
-                # .npy 파일 로드
                 if file_name.endswith('.npy'):
-                    # 파일 로드 시도 전 경로 출력 (디버깅 목적)
-                    print(f"Attempting to load NPY file: {file_path}")
-                    return np.load(file_path, allow_pickle=True) # allow_pickle=True 추가
+                    # print(f"Attempting to load NPY file: {file_path}")
+                    return np.load(file_path, allow_pickle=True)
             except Exception as e:
-                # 에러 발생 시 실패 경로를 명시
                 print(f"Error loading answer file for {qid}: [File Not Found] {file_path}")
-                return None  # 로드 실패 시 None 반환
+                return None
         return correct_data
         
-    # grade 함수 이하의 모든 채점 로직은 이전과 동일합니다.
     def grade(self, student_answers: dict):
         score = 0
         feedback = []
@@ -66,7 +104,6 @@ class Grader:
             # 1. 학생 답안의 기본 타입을 list로 통일
             try:
                 if isinstance(correct, np.ndarray) and isinstance(student_answer, (list, tuple)):
-                    # 정답이 np.ndarray일 경우, 학생 답안을 변환하지 않고 바로 3단계에서 np.array로 변환하도록 건너뜁니다.
                     pass
                 else:
                     if isinstance(student_answer, (np.ndarray, pd.Series)):
@@ -92,7 +129,6 @@ class Grader:
                 is_correct = False
                 
                 if isinstance(correct, np.ndarray):
-                    # 학생 답안이 리스트이거나 스칼라 값일 수 있으므로 np.array로 변환
                     try:
                         student_array = np.array(student_answer)
                     except:
@@ -100,14 +136,11 @@ class Grader:
                         feedback.append(f"{qid}: 오답 ❌ (답안 배열 변환 오류)")
                         continue
 
-                    # 배열 크기가 다르면 오답
                     if student_array.shape != correct.shape:
                         is_correct = False
                     else:
-                        # 부동소수점 오차를 고려하여 비교 (가장 일반적인 형태)
                         is_correct = np.allclose(student_array, correct)
                         
-                # 소수점 리스트 비교 (부동소수점 오차 처리)
                 elif isinstance(correct, list) and correct:
                     is_float_list = False
                     first_val = correct[0]
@@ -122,7 +155,6 @@ class Grader:
                     else:
                         is_correct = (student_answer == correct)
                 
-                # 스칼라 값 비교
                 else:
                     is_correct = (student_answer == correct)
 
@@ -135,3 +167,4 @@ class Grader:
                 feedback.append(f"{qid}: 오답 ❌ (비교 중 예외 발생)")
 
         return score, "\n".join(feedback)
+```eof
