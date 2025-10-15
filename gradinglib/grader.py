@@ -167,4 +167,3 @@ class Grader:
                 feedback.append(f"{qid}: 오답 ❌ (비교 중 예외 발생)")
 
         return score, "\n".join(feedback)
-```
