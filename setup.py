@@ -7,12 +7,12 @@ setup(
 
     package_data={
         'gradinglib': [
-            'answers.json', 
-            '*.npy' 
+            'answers.enc',
+            '*.npy'
         ]
     }, 
     description='Python assignment grading library',
     author='Lim Hyung Geun',
     author_email='mathlim@hoseo.cnehs.kr',
-    include_package_data=True 
+    include_package_data=True
 )
