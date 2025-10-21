@@ -15,11 +15,7 @@ def _display_html(html: str):
         pass
 
 def make_signature(student_id: str, name: str, exam_code: str, score: float, secret: bytes | str) -> str:
-    """
-    Apps Script Code.gs 의 makeMessageForSig() 규약과 100% 동일:
-    메시지:  "학번|이름|시험코드|점수"
-    알고리즘: HMAC-SHA256 → Base64
-    """
+    # 메시지: 학번|이름|시험코드|점수  (여기서 점수는 '최종점수')
     if isinstance(secret, str):
         secret = secret.encode("utf-8")
     msg = f"{student_id}|{name}|{exam_code}|{score}"
@@ -32,19 +28,16 @@ def build_submit_url(
     *,
     student_id: str,
     name: str,
-    exam_code: str,  # exam1 / exam2 / exam3
-    score: float,
+    exam_code: str,
+    score: float,           # ✅ 최종점수
     feedback: str = "",
 ) -> str:
-    """
-    제출 페이지(doGet) URL을 생성해 돌려줍니다. (HMAC 서명 포함)
-    """
     sig = make_signature(student_id, name, exam_code, score, secret)
     params = {
         "student_id": student_id,
         "name": name,
         "exam_code": exam_code,
-        "score": score,
+        "score": score,     # ✅ 최종점수 그대로 전송
         "feedback": feedback,
         "sig": sig,
     }
@@ -57,14 +50,10 @@ def show_submit_button(
     student_id: str,
     name: str,
     exam_code: str,
-    score: float,
+    score: float,           # ✅ 최종점수
     feedback: str = "",
     title: str = "채점 완료",
 ) -> str:
-    """
-    코랩/주피터에서 '제출 페이지 열기' 버튼을 렌더링합니다.
-    반환값: 생성된 URL (로그/테스트 용)
-    """
     url = build_submit_url(
         webapp_url, secret,
         student_id=student_id, name=name, exam_code=exam_code,
