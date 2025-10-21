@@ -4,7 +4,7 @@ from typing import Any, Dict, Tuple, Optional
 import requests
 import hmac, hashlib, base64
 from urllib.parse import urlencode
-import collections # 👈 [추가됨] 정렬된 딕셔너리(서명용)를 위해
+import collections 
 
 # 코랩 버튼 렌더링용
 def _display_html(html: str):
@@ -12,50 +12,31 @@ def _display_html(html: str):
         from IPython.display import HTML, display  # Colab/Jupyter에서만
         display(HTML(html))
     except Exception:
-        # 노트북 환경이 아니면 무시
         pass
 
-# --- [수정됨] Code.gs와 일치하는 JSON 서명 함수 ---
-def _make_json_signature(payload: Dict[str, Any], secret: str | bytes) -> str:
-    """
-    Apps Script(Code.gs)의 서명 로직과 일치하는 HMAC-SHA256 서명을 생성합니다.
-    """
-    if isinstance(secret, str):
-        secret = secret.encode("utf-8")
-    
-    # 1. 키 기준으로 정렬
-    ordered_payload = collections.OrderedDict(sorted(payload.items()))
-    
-    # 2. JSON 문자열로 변환 (공백 없이)
-    # [수정됨] ensure_ascii=False 옵션을 제거하여 Code.gs와 동일하게 만듭니다.
-    payload_string = json.dumps(ordered_payload, separators=(',', ':'))
-    
-    # 3. HMAC-SHA256 계산
-    digest = hmac.new(secret, payload_string.encode("utf-8"), hashlib.sha256).digest()
-    
-    # 4. 16진수 문자열로 반환
-    return digest.hex()
+# [삭제됨]
+# --- JSON 서명 함수 (전체 삭제) ---
+# def _make_json_signature(...)
 
 
-# --- [핵심 수정] 버튼 표시 대신 '직접 POST 제출'을 하도록 변경 ---
+# --- [핵심 수정] 서명(sig) 없이 POST 제출 ---
 def show_submit_button(
     webapp_url: str,
-    secret: bytes | str,
+    secret: bytes | str, # (secret 파라미터는 받지만 사용하지 않음)
     *,
     student_id: str,
     name: str,
     exam_code: str,
-    score: float,          # ✅ 최종점수
+    score: float,          
     feedback: str = "",
     title: str = "채점 완료",
 ) -> str:
     """
     [수정됨] 
-    HTML 버튼을 표시하는 대신, 서버(Apps Script)로 직접 POST 요청을 전송하고
-    그 결과를 HTML로 표시합니다.
+    서명(sig) 없이 서버(Apps Script)로 직접 POST 요청을 전송합니다.
     """
     
-    # 1. 서명할 데이터 준비 (sig 자체는 제외)
+    # 1. [수정됨] 전송할 페이로드 (sig 제외)
     payload_data = {
         "student_id": str(student_id).strip(),
         "name": str(name).strip(),
@@ -64,36 +45,26 @@ def show_submit_button(
         "feedback": feedback,
     }
 
-    # 2. 서명 생성
-    try:
-        sig = _make_json_signature(payload_data, secret)
-    except Exception as e:
-        error_html = f"<h3>❌ 서명 생성 오류</h3><p>로컬에서 서명을 생성하는 중 오류가 발생했습니다: {e}</p>"
-        _display_html(error_html)
-        return f"[Debug] Signature generation error: {e}"
+    # [삭제됨]
+    # 2. 서명 생성 로직 (전체 삭제)
+    # try: sig = _make_json_signature(...)
 
-    # 3. 전송할 전체 페이로드 (데이터 + 서명)
-    full_payload = {
-        **payload_data,
-        "sig": sig
-    }
+    # [삭제됨]
+    # 3. 전체 페이로드 (sig 포함) 로직 (전체 삭제)
+    # full_payload = { ... }
 
     # 4. Apps Script로 직접 POST 요청 전송
     html_result = ""
     debug_message = ""
     
-    # [삭제됨]
-    # '학번/이름 미입력 방지' if 블록이 여기서 삭제되었습니다.
-    # 이제 "None" 값도 서버로 그대로 전송됩니다.
-
     try:
         r = requests.post(
             webapp_url,
-            json=full_payload,  # data= 대신 json= 사용
+            json=payload_data,  # [수정됨] sig가 없는 payload_data를 바로 전송
             headers={"Content-Type": "application/json"},
-            timeout=20, # 20초 타임아웃
+            timeout=20, 
         )
-        r.raise_for_status() # 4xx, 5xx 오류 발생 시 예외 발생
+        r.raise_for_status() 
         
         # 5. Code.gs로부터 받은 JSON 응답 파싱
         res = r.json()
@@ -142,40 +113,12 @@ def show_submit_button(
     # 7. __init__.py로 디버그 메시지 반환 (Colab 셀에 출력됨)
     return debug_message
 
+# [삭제됨]
 # ------------------------------------------------------------------
-#  ▼ 아래 함수들은 새 방식(POST)에서는 사용되지 않지만,
-#    (혹시 모를 호환성을 위해) 그대로 둡니다.
+#  ▼ 아래 함수들은 더 이상 사용되지 않으므로 삭제
 # ------------------------------------------------------------------
-
-def make_signature(student_id: str, name: str, exam_code: str, score: float, secret: bytes | str) -> str:
-    # (구 방식 서명 로직)
-    if isinstance(secret, str):
-        secret = secret.encode("utf-8")
-    msg = f"{student_id}|{name}|{exam_code}|{score}"
-    digest = hmac.new(secret, msg.encode("utf-8"), hashlib.sha256).digest()
-    return base64.b64encode(digest).decode("ascii")
-
-def build_submit_url(
-    webapp_url: str,
-    secret: bytes | str,
-    *,
-    student_id: str,
-    name: str,
-    exam_code: str,
-    score: float,          # ✅ 최종점수
-    feedback: str = "",
-) -> str:
-    # (구 방식 URL 빌드 로직)
-    sig = make_signature(student_id, name, exam_code, score, secret)
-    params = {
-        "student_id": student_id,
-        "name": name,
-        "exam_code": exam_code,
-        "score": score,    # ✅ 최종점수 그대로 전송
-        "feedback": feedback,
-        "sig": sig,
-    }
-    return webapp_url.rstrip("?") + "?" + urlencode(params, encoding="utf-8", doseq=True)
+# def make_signature(...):
+# def build_submit_url(...):
 
 
 # ---------------- 기존 서버→서버 POST (필요 시 유지) ----------------
@@ -236,8 +179,6 @@ def save_result_via_appsscript(
             timeout=timeout,
         )
         r.raise_for_status()
-
-        # JSON 파싱
         try:
             res = r.json()
         except ValueError:
@@ -245,24 +186,16 @@ def save_result_via_appsscript(
             if len(body_preview) > 300:
                 body_preview = body_preview[:300] + "...(truncated)"
             return f"[전송실패] 응답이 JSON 형식이 아닙니다: {body_preview}"
-
-        # 표준화된 상태 판정
         status, reason = _normalize_response(res)
-
         if status == "success":
             return f"[저장완료] {assignment} / {student_id}"
-
         if status == "already_submitted":
             return "[재제출차단] 이미 제출된 기록이 있어 저장되지 않았습니다."
-
-        # 그 밖의 에러: 서버 메시지 함께 노출
         msg = res.get("message") or res.get("detail") or res.get("error") or res
         return f"[전송실패] {msg}"
-
     except requests.exceptions.Timeout:
         return "[전송실패] 네트워크 지연으로 시간 초과되었습니다.(timeout)"
     except requests.exceptions.HTTPError as e:
-        # HTTP 오류의 응답 본문 프리뷰
         body_preview = ""
         try:
             body_preview = r.text.strip()
