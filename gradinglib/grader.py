@@ -15,12 +15,16 @@ def decrypt_data(key, file_path):
 
 class Grader:
     def __init__(self):
-        module_path = os.path.dirname(inspect.getfile(self.__class__))
-        enc_path = os.path.join(module_path, ENCRYPTED_ANSWERS_FILE)
+        # ... 기존 복호화 로직 동일
         try:
-            self.answers = decrypt_data(SECRET_KEY, enc_path)
+            module_path = os.path.dirname(inspect.getfile(self.__class__))
+            enc_path = os.path.join(module_path, ENCRYPTED_ANSWERS_FILE)
+            self.answers = decrypt_data(SECRET_KEY, enc_path) or {}
         except Exception:
             self.answers = {}
+        # ✅ 총 문항 수(스케일링에 사용)
+        self.total_questions = len(self.answers) if isinstance(self.answers, dict) else 0
+
 
     def _load_correct_answer(self, qid, correct_data):
         if isinstance(correct_data, str) and correct_data.startswith("FILE:"):
