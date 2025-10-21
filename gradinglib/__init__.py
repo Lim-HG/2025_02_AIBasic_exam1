@@ -1,3 +1,4 @@
+# gradinglib/__init__.py
 from .grader import Grader
 from .submit import (
     save_result_via_appsscript,
@@ -26,7 +27,7 @@ def grade_and_render_submit(
     *,
     student_id: str,
     name: str,
-    exam_code: str,           # exam1 / exam2 / exam3
+    exam_code: str,          # exam1 / exam2 / exam3
     answers: dict,
     webapp_url: str,
     secret: str | bytes,
@@ -47,16 +48,22 @@ def grade_and_render_submit(
 
     # ✅ 최종점수 산출
     if scale_to_100:
-        final_score = round((raw_score / total) * 100.0, decimals)
+        final_score_float = round((raw_score / total) * 100.0, decimals)
     else:
         # 기본: 문항당 배점 방식
         p = points_per_question if points_per_question is not None else 10.0
-        final_score = round(raw_score * p, decimals)
+        final_score_float = round(raw_score * p, decimals)
+
+    # [수정됨] decimals=0이면 int로 변환 (JSON 서명 일치용)
+    if decimals == 0:
+        final_score = int(final_score_float)
+    else:
+        final_score = final_score_float
 
     # ✅ 최종점수를 서명/URL/버튼에 사용
     url = show_submit_button(
         webapp_url, secret,
         student_id=student_id, name=name, exam_code=exam_code,
-        score=final_score, feedback=feedback, title=title
+        score=final_score, feedback=feedback, title=title # 👈 수정된 final_score 사용
     )
     return final_score, feedback, url
