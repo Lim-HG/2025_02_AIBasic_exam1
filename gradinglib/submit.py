@@ -130,7 +130,7 @@ def save_result_via_appsscript(
             headers={"Content-Type": "application/json"},
             timeout=timeout,
         )
-               r.raise_for_status()
+        r.raise_for_status()
 
         # JSON 파싱
         try:
