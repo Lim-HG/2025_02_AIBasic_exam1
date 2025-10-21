@@ -19,10 +19,6 @@ def _display_html(html: str):
 def _make_json_signature(payload: Dict[str, Any], secret: str | bytes) -> str:
     """
     Apps Script(Code.gs)의 서명 로직과 일치하는 HMAC-SHA256 서명을 생성합니다.
-    1. 딕셔너리를 키(key) 기준으로 정렬합니다.
-    2. JSON 문자열로 변환합니다.
-    3. HMAC-SHA256 다이제스트를 계산합니다.
-    4. 16진수(hex) 문자열로 반환합니다.
     """
     if isinstance(secret, str):
         secret = secret.encode("utf-8")
@@ -85,17 +81,9 @@ def show_submit_button(
     html_result = ""
     debug_message = ""
     
-    # 학번/이름 미입력 방지
-    if not student_id or student_id.lower() == "none" or not name or name.lower() == "none":
-        html_result = f"""
-        <div style="font-family:system-ui; padding:12px; border:1px solid #b00020; background: #fce8e6; border-radius:12px;">
-            <h3 style="margin:0 0 8px 0; color: #b00020;">❌ 제출 실패</h3>
-            <p style="color:#b00020; margin-top:8px;"><b>오류: 학번과 이름을 입력한 후 다시 실행하세요.</b></p>
-        </div>
-        """
-        debug_message = "[Failed] Reason: No student_id or name"
-        _display_html(html_result)
-        return debug_message
+    # [삭제됨]
+    # '학번/이름 미입력 방지' if 블록이 여기서 삭제되었습니다.
+    # 이제 "None" 값도 서버로 그대로 전송됩니다.
 
     try:
         r = requests.post(
