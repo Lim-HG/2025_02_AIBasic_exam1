@@ -1,43 +1,112 @@
 # gradinglib/submit.py
 import json
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple, Optional
 import requests
+import hmac, hashlib, base64
+from urllib.parse import urlencode
 
+# 코랩 버튼 렌더링용
+def _display_html(html: str):
+    try:
+        from IPython.display import HTML, display  # Colab/Jupyter에서만
+        display(HTML(html))
+    except Exception:
+        # 노트북 환경이 아니면 무시
+        pass
+
+def make_signature(student_id: str, name: str, exam_code: str, score: float, secret: bytes | str) -> str:
+    """
+    Apps Script Code.gs 의 makeMessageForSig() 규약과 100% 동일:
+    메시지:  "학번|이름|시험코드|점수"
+    알고리즘: HMAC-SHA256 → Base64
+    """
+    if isinstance(secret, str):
+        secret = secret.encode("utf-8")
+    msg = f"{student_id}|{name}|{exam_code}|{score}"
+    digest = hmac.new(secret, msg.encode("utf-8"), hashlib.sha256).digest()
+    return base64.b64encode(digest).decode("ascii")
+
+def build_submit_url(
+    webapp_url: str,
+    secret: bytes | str,
+    *,
+    student_id: str,
+    name: str,
+    exam_code: str,  # exam1 / exam2 / exam3
+    score: float,
+    feedback: str = "",
+) -> str:
+    """
+    제출 페이지(doGet) URL을 생성해 돌려줍니다. (HMAC 서명 포함)
+    """
+    sig = make_signature(student_id, name, exam_code, score, secret)
+    params = {
+        "student_id": student_id,
+        "name": name,
+        "exam_code": exam_code,
+        "score": score,
+        "feedback": feedback,
+        "sig": sig,
+    }
+    return webapp_url.rstrip("?") + "?" + urlencode(params, encoding="utf-8", doseq=True)
+
+def show_submit_button(
+    webapp_url: str,
+    secret: bytes | str,
+    *,
+    student_id: str,
+    name: str,
+    exam_code: str,
+    score: float,
+    feedback: str = "",
+    title: str = "채점 완료",
+) -> str:
+    """
+    코랩/주피터에서 '제출 페이지 열기' 버튼을 렌더링합니다.
+    반환값: 생성된 URL (로그/테스트 용)
+    """
+    url = build_submit_url(
+        webapp_url, secret,
+        student_id=student_id, name=name, exam_code=exam_code,
+        score=score, feedback=feedback
+    )
+    html = f"""
+    <div style="font-family:system-ui; padding:12px; border:1px solid #eee; border-radius:12px;">
+      <h3 style="margin:0 0 8px 0;">{title}</h3>
+      <div>시험코드: <b>{exam_code}</b></div>
+      <div>점수: <b>{score}</b></div>
+      <div style="white-space:pre-line; color:#444; margin-top:6px;">피드백: {feedback}</div>
+      <hr/>
+      <p><b>마지막 단계:</b> 아래 버튼을 눌러 <u>학교 계정으로 1회 제출</u>하세요. (시험코드별 1회)</p>
+      <a href="{url}" target="_blank"
+         style="display:inline-block; padding:10px 14px; border-radius:8px; text-decoration:none; border:1px solid #ccc;">
+         제출 페이지 열기
+      </a>
+    </div>
+    """
+    _display_html(html)
+    return url
+
+# ---------------- 기존 서버→서버 POST (필요 시 유지) ----------------
 
 def _normalize_response(res: Dict[str, Any]) -> Tuple[str, str]:
-    """
-    서버(Apps Script) 응답을 단일 인터페이스로 정규화한다.
-    반환: (status, reason)
-      - status: "success" | "already_submitted" | "error"
-      - reason: 부가 사유(없으면 빈 문자열)
-    지원 스키마:
-      A) { "ok": true/false, "reason"?: str, "message"?: str }
-      B) { "status": "success"|"error", "reason"?: str, "message"?: str }
-    """
-    # 스키마 A 우선 처리
     if "ok" in res:
         if res.get("ok") is True:
             return "success", ""
-        # ok=False일 경우
         reason = str(res.get("reason", "")).strip().lower()
         if reason == "already_submitted":
             return "already_submitted", reason or "already_submitted"
         return "error", reason
-
-    # 스키마 B 처리
     if "status" in res:
         status = str(res.get("status", "")).strip().lower()
-        reason = str(res.get("reason", "") or "").strip().lower()
+        reason = str(res.get("reason") or "").strip().lower()
         if status == "success":
             return "success", ""
         if reason == "already_submitted":
             return "already_submitted", reason
         if status == "error":
             return "error", reason
-
-    # 알 수 없는 스키마
     return "error", ""
-
 
 def save_result_via_appsscript(
     student_id: str,
@@ -52,35 +121,13 @@ def save_result_via_appsscript(
     target: str = "score",
     timeout: int = 15,
 ) -> str:
-    """
-    Google Apps Script Web App으로 채점 결과를 전송한다.
-
-    파라미터
-    ----------
-    student_id : 학번(문자열)
-    name       : 학생 이름
-    score      : 점수(정수/실수)
-    feedback   : 피드백(문자열)
-    app_script_url : Apps Script Web App 배포 URL (/exec)
-    assignment : 과제 코드(선택)
-    email      : 로그인 이메일(보조 식별; ActiveUser 비활성 환경 대비)
-    api_key    : (선택) 서버에서 body.api_key 검증 시 사용
-    target     : (선택) 서버 라우팅용 키(예: "score", "feedback")
-    timeout    : 요청 타임아웃(초)
-
-    반환
-    ----
-    사용자 노트북에 바로 출력 가능한 한국어 상태 메시지 문자열
-    """
-
-    # 전송 페이로드
     payload: Dict[str, Any] = {
         "student_id": student_id,
         "name": name,
         "score": score,
         "feedback": feedback,
         "assignment": assignment,
-        "target": target,  # 서버에서 라우팅을 쓸 수 있도록 기본 포함(미사용이면 무시됨)
+        "target": target,
     }
     if email:
         payload["email"] = email
@@ -94,44 +141,5 @@ def save_result_via_appsscript(
             headers={"Content-Type": "application/json"},
             timeout=timeout,
         )
-        # HTTP 레벨 에러(4xx/5xx) → 예외
         r.raise_for_status()
-
-        # JSON 파싱
         try:
-            res = r.json()
-        except ValueError:
-            # JSON이 아니더라도 서버 본문을 함께 보여 주어 진단 가능하게 처리
-            body_preview = (r.text or "").strip()
-            if len(body_preview) > 300:
-                body_preview = body_preview[:300] + "...(truncated)"
-            return f"[전송실패] 응답이 JSON 형식이 아닙니다: {body_preview}"
-
-        status, reason = _normalize_response(res)
-
-        if status == "success":
-            return f"[저장완료] {assignment} / {student_id}"
-
-        if status == "already_submitted":
-            return "[재제출차단] 이미 제출된 기록이 있어 저장되지 않았습니다."
-
-        # 그 밖의 에러: 서버 메시지 함께 노출
-        msg = res.get("message") or res.get("detail") or res.get("error") or res
-        return f"[전송실패] {msg}"
-
-    except requests.exceptions.Timeout:
-        return "[전송실패] 네트워크 지연으로 시간 초과되었습니다.(timeout)"
-    except requests.exceptions.HTTPError as e:
-        # 서버 본문 일부를 덧붙여 진단 용이
-        body_preview = ""
-        try:
-            body_preview = r.text.strip()
-            if len(body_preview) > 300:
-                body_preview = body_preview[:300] + "...(truncated)"
-        except Exception:
-            pass
-        return f"[전송실패] HTTP 오류: {e}; 응답 본문: {body_preview}"
-    except requests.exceptions.RequestException as e:
-        return f"[전송실패] 네트워크/요청 오류: {e}"
-    except Exception as e:
-        return f"[전송실패] 처리 중 예외: {e}"
