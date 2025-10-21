@@ -130,5 +130,43 @@ def save_result_via_appsscript(
             headers={"Content-Type": "application/json"},
             timeout=timeout,
         )
-        r.raise_for_status()
+               r.raise_for_status()
+
+        # JSON 파싱
         try:
+            res = r.json()
+        except ValueError:
+            body_preview = (r.text or "").strip()
+            if len(body_preview) > 300:
+                body_preview = body_preview[:300] + "...(truncated)"
+            return f"[전송실패] 응답이 JSON 형식이 아닙니다: {body_preview}"
+
+        # 표준화된 상태 판정
+        status, reason = _normalize_response(res)
+
+        if status == "success":
+            return f"[저장완료] {assignment} / {student_id}"
+
+        if status == "already_submitted":
+            return "[재제출차단] 이미 제출된 기록이 있어 저장되지 않았습니다."
+
+        # 그 밖의 에러: 서버 메시지 함께 노출
+        msg = res.get("message") or res.get("detail") or res.get("error") or res
+        return f"[전송실패] {msg}"
+
+    except requests.exceptions.Timeout:
+        return "[전송실패] 네트워크 지연으로 시간 초과되었습니다.(timeout)"
+    except requests.exceptions.HTTPError as e:
+        # HTTP 오류의 응답 본문 프리뷰
+        body_preview = ""
+        try:
+            body_preview = r.text.strip()
+            if len(body_preview) > 300:
+                body_preview = body_preview[:300] + "...(truncated)"
+        except Exception:
+            pass
+        return f"[전송실패] HTTP 오류: {e}; 응답 본문: {body_preview}"
+    except requests.exceptions.RequestException as e:
+        return f"[전송실패] 네트워크/요청 오류: {e}"
+    except Exception as e:
+        return f"[전송실패] 처리 중 예외: {e}"
