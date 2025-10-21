@@ -14,12 +14,9 @@ def _display_html(html: str):
     except Exception:
         pass
 
-# [삭제됨]
-# --- JSON 서명 함수 (전체 삭제) ---
-# def _make_json_signature(...)
+# [삭제됨] 서명 함수
 
-
-# --- [핵심 수정] 서명(sig) 없이 POST 제출 ---
+# --- [핵심 수정] 학번/이름 확인 로직 복원 ---
 def show_submit_button(
     webapp_url: str,
     secret: bytes | str, # (secret 파라미터는 받지만 사용하지 않음)
@@ -33,10 +30,10 @@ def show_submit_button(
 ) -> str:
     """
     [수정됨] 
-    서명(sig) 없이 서버(Apps Script)로 직접 POST 요청을 전송합니다.
+    서버(Apps Script)로 직접 POST 요청을 전송합니다.
     """
     
-    # 1. [수정됨] 전송할 페이로드 (sig 제외)
+    # 1. 전송할 페이로드
     payload_data = {
         "student_id": str(student_id).strip(),
         "name": str(name).strip(),
@@ -45,28 +42,32 @@ def show_submit_button(
         "feedback": feedback,
     }
 
-    # [삭제됨]
-    # 2. 서명 생성 로직 (전체 삭제)
-    # try: sig = _make_json_signature(...)
-
-    # [삭제됨]
-    # 3. 전체 페이로드 (sig 포함) 로직 (전체 삭제)
-    # full_payload = { ... }
-
-    # 4. Apps Script로 직접 POST 요청 전송
+    # 2. [복원됨] 학번/이름 미입력 방지
     html_result = ""
     debug_message = ""
     
+    if not student_id or student_id.lower() == "none" or not name or name.lower() == "none":
+        html_result = f"""
+        <div style="font-family:system-ui; padding:12px; border:1px solid #b00020; background: #fce8e6; border-radius:12px;">
+            <h3 style="margin:0 0 8px 0; color: #b00020;">❌ 제출 실패</h3>
+            <p style="color:#b00020; margin-top:8px;"><b>오류: Colab 상단의 '학번과 이름을 입력하고 실행하세요' 셀을 먼저 실행해야 합니다.</b></p>
+        </div>
+        """
+        debug_message = "[Failed] Reason: No student_id or name"
+        _display_html(html_result)
+        return debug_message
+
+    # 3. Apps Script로 직접 POST 요청 전송
     try:
         r = requests.post(
             webapp_url,
-            json=payload_data,  # [수정됨] sig가 없는 payload_data를 바로 전송
+            json=payload_data,
             headers={"Content-Type": "application/json"},
             timeout=20, 
         )
         r.raise_for_status() 
         
-        # 5. Code.gs로부터 받은 JSON 응답 파싱
+        # 4. Code.gs로부터 받은 JSON 응답 파싱
         res = r.json()
         message = res.get("message", "알 수 없는 응답입니다.")
 
@@ -101,24 +102,17 @@ def show_submit_button(
         html_result = "<h3>❌ 시간 초과</h3><p>서버에 연결하는 데 시간이 너무 오래 걸립니다.</p>"
         debug_message = "[Debug] Request Timeout"
     except requests.exceptions.RequestException as e:
-        html_result = f"<h3>❌ 네트워크 오류</h3><p>서버에 연결할 수 없습니다: {e}</p>"
+        html_result = "<h3>❌ 네트워크 오류</h3><p>서버에 연결할 수 없습니다: {e}</p>"
         debug_message = f"[Debug] Network error: {e}"
     except Exception as e:
         html_result = f"<h3>❌ 알 수 없는 오류</h3><p>제출 중 예기치 않은 오류가 발생했습니다: {e}</p>"
         debug_message = f"[Debug] Unknown error: {e}"
 
-    # 6. Colab에 결과 HTML 표시
+    # 5. Colab에 결과 HTML 표시
     _display_html(html_result)
     
-    # 7. __init__.py로 디버그 메시지 반환 (Colab 셀에 출력됨)
+    # 6. __init__.py로 디버그 메시지 반환 (Colab 셀에 출력됨)
     return debug_message
-
-# [삭제됨]
-# ------------------------------------------------------------------
-#  ▼ 아래 함수들은 더 이상 사용되지 않으므로 삭제
-# ------------------------------------------------------------------
-# def make_signature(...):
-# def build_submit_url(...):
 
 
 # ---------------- 기존 서버→서버 POST (필요 시 유지) ----------------
@@ -184,7 +178,7 @@ def save_result_via_appsscript(
         except ValueError:
             body_preview = (r.text or "").strip()
             if len(body_preview) > 300:
-                body_preview = body_preview[:300] + "...(truncated)"
+                body_preview = body_body_preview[:300] + "...(truncated)"
             return f"[전송실패] 응답이 JSON 형식이 아닙니다: {body_preview}"
         status, reason = _normalize_response(res)
         if status == "success":
