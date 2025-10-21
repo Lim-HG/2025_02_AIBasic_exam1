@@ -15,7 +15,7 @@ def _display_html(html: str):
         # 노트북 환경이 아니면 무시
         pass
 
-# --- [새로 추가됨] Code.gs와 일치하는 JSON 서명 함수 ---
+# --- [수정됨] Code.gs와 일치하는 JSON 서명 함수 ---
 def _make_json_signature(payload: Dict[str, Any], secret: str | bytes) -> str:
     """
     Apps Script(Code.gs)의 서명 로직과 일치하는 HMAC-SHA256 서명을 생성합니다.
@@ -27,7 +27,8 @@ def _make_json_signature(payload: Dict[str, Any], secret: str | bytes) -> str:
     ordered_payload = collections.OrderedDict(sorted(payload.items()))
     
     # 2. JSON 문자열로 변환 (공백 없이)
-    payload_string = json.dumps(ordered_payload, separators=(',', ':'), ensure_ascii=False)
+    # [수정됨] ensure_ascii=False 옵션을 제거하여 Code.gs와 동일하게 만듭니다.
+    payload_string = json.dumps(ordered_payload, separators=(',', ':'))
     
     # 3. HMAC-SHA256 계산
     digest = hmac.new(secret, payload_string.encode("utf-8"), hashlib.sha256).digest()
