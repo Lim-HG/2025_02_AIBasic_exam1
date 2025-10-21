@@ -2,8 +2,8 @@
 from .grader import Grader
 from .submit import (
     save_result_via_appsscript,
-    make_signature,
-    build_submit_url,
+    # make_signature, # [삭제됨] 키(서명)를 사용하지 않으므로 import 제거
+    # build_submit_url, # [삭제됨] 키(서명)를 사용하지 않으므로 import 제거
     show_submit_button,
 )
 
@@ -30,7 +30,7 @@ def grade_and_render_submit(
     exam_code: str,          # exam1 / exam2 / exam3
     answers: dict,
     webapp_url: str,
-    secret: str | bytes,
+    secret: str | bytes,     # (secret 파라미터는 받지만 사용하지 않음)
     title: str = "채점 완료",
     # ✅ 최종점수 스케일링 옵션 (둘 중 하나 택1)
     points_per_question: float | None = 10.0,  # 예: 문항당 10점 → 100점 만점
@@ -52,7 +52,7 @@ def grade_and_render_submit(
         p = points_per_question if points_per_question is not None else 10.0
         final_score_float = round(raw_score * p, decimals)
 
-    # [수정됨] decimals=0이면 int로 변환 (JSON 서명 일치용)
+    # (int 변환 로직은 서명 없이도 JSON 일관성을 위해 유지하는 것이 좋습니다)
     if decimals == 0:
         final_score = int(final_score_float)
     else:
@@ -60,8 +60,8 @@ def grade_and_render_submit(
 
     # ✅ 최종점수를 서명/URL/버튼에 사용
     url = show_submit_button(
-        webapp_url, secret,
+        webapp_url, secret, # (secret은 전달되지만 submit.py에서 사용 안 함)
         student_id=student_id, name=name, exam_code=exam_code,
-        score=final_score, feedback=feedback, title=title # 👈 수정된 final_score 사용
+        score=final_score, feedback=feedback, title=title 
     )
     return final_score, feedback, url
