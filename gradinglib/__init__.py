@@ -39,8 +39,6 @@ def grade_and_render_submit(
 ):
     """
     채점 후 '최종점수'를 산출하여 버튼을 렌더합니다.
-    - 점수는 시트의 '점수' 열에 그대로 저장될 값입니다.
-    - 시험코드는 URL 파라미터로 전달되고, 서버에서 [examX] 태그를 피드백 앞에 붙입니다.
     """
     grader = Grader()
     raw_score, feedback = grader.grade(answers)    # raw_score = 맞힌 문항 수
