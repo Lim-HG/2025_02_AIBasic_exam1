@@ -45,31 +45,31 @@ class Grader:
                 feedback.append(f"{qid}: 오답 ❌ (정답 없음)")
                 continue
             
-            # 비교 로직: list/np.ndarray/float 등 유형별 비교
+            # --- [수정된 로직 시작] ---
+            
+            # is_correct를 try 블록 이전에 False로 초기화
             is_correct = False
+            
             try:
                 if isinstance(correct, np.ndarray):
+                    # (A) 정답이 ndarray (npy 파일)인 경우: allclose 사용
                     student_array = np.array(student_answer)
                     is_correct = student_array.shape == correct.shape and np.allclose(student_array, correct)
                 
-                # [수정됨] 튜플/리스트 비교 로직
-                elif isinstance(correct, list):
-                    # 1. 리스트에 float이 포함된 경우 (예: [0.1, 0.2])
-                    if any(isinstance(x,float) for x in correct):
-                        is_correct = np.allclose(student_answer, correct)
-                    # 2. 학생 답이 튜플이고 정답이 리스트인 경우 (예: Q2_01)
-                    elif isinstance(student_answer, tuple):
-                        is_correct = (list(student_answer) == correct)
-                    # 3. 그 외 (리스트 vs 리스트)
-                    else:
-                        is_correct = (student_answer == correct)
+                elif isinstance(correct, (list, tuple)) and any(isinstance(x, (float, np.floating)) for x in correct):
+                    # (B) 정답이 float을 포함한 list/tuple인 경우: allclose 사용
+                    is_correct = np.allclose(student_answer, correct)
                 
-                # 그 외 (int, str 등)
                 else:
-                    is_correct = (student_answer == correct)
+                    # (C) 그 외 (int, str, float, 또는 non-float list/tuple)
+                    # np.array_equal은 스칼라, 리스트, 튜플, ndarray 간 비교를
+                    # 안전하게 처리하여 단일 boolean을 반환합니다.
+                    is_correct = np.array_equal(student_answer, correct)
             
             except Exception:
                 pass # 비교 중 오류 발생 시 is_correct = False 유지
+            
+            # --- [수정된 로직 끝] ---
             
             if is_correct:
                 score += 1; feedback.append(f"{qid}: 정답 ✅")
