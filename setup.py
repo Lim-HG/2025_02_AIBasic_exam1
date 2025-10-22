@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='gradinglib',
-    version='1.0.3',                # ← 최신 버전
+    version='1.0.4',                # ← 최신 버전
     packages=find_packages(),
     package_data={
         'gradinglib': ['answers.enc', '*.npy']
