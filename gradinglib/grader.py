@@ -1,3 +1,4 @@
+#  gradinglib/grader.py
 import json, os, numpy as np, pandas as pd, inspect
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
@@ -44,28 +45,34 @@ class Grader:
                 feedback.append(f"{qid}: 오답 ❌ (정답 없음)")
                 continue
             
-            # --- [수정된 비교 로직] ---
-            
+            # --- [수정된 비교 로직: allclose가 False여도 array_equal 시도] ---
             is_correct = False
             try:
-                # 1순위: 숫자/배열 비교 (부동소수점 허용)
-                # np.allclose는 int, float, list, ndarray, nested list/array 등
-                # 대부분의 숫자형 데이터를 (근사치로) 안전하게 비교합니다.
-                # (Q2_05, Q2_06, Q2_09, Q2_11, Q2_12, Q2_13, Q2_14, Q2_15, Q2_16 등)
-                is_correct = np.allclose(student_answer, correct)
-
-            except (TypeError, ValueError):
-                # 2순위: allclose가 실패한 경우 (예: 문자열, 객체 리스트 등)
+                ac = None
                 try:
-                    # np.array_equal (정확한 비교)
-                    is_correct = np.array_equal(student_answer, correct)
+                    # 1) 근사 비교 (가능하면 사용)
+                    ac = np.allclose(student_answer, correct)
                 except Exception:
-                    # 3순위: 파이썬 기본 비교
-                    is_correct = (student_answer == correct)
-            
+                    ac = None  # ragged 등으로 예외가 나면 근사 비교 생략
+
+                if ac is True:
+                    is_correct = True
+                else:
+                    # 2) 동등 비교 (리스트/튜플/np스칼라 혼재, ragged 대비)
+                    try:
+                        sa = np.asarray(student_answer, dtype=object)
+                        ca = np.asarray(correct, dtype=object)
+                        is_correct = np.array_equal(sa, ca)
+                    except Exception:
+                        # 3) 최후: 파이썬 기본 비교
+                        is_correct = (student_answer == correct)
+
             except Exception:
-                pass # allclose에서 다른 예외 발생 시 (비교 불가)
-            
+                # 비교 과정에서 어떤 예외가 나도 마지막으로 기본 비교 시도
+                try:
+                    is_correct = (student_answer == correct)
+                except Exception:
+                    is_correct = False
             # --- [수정 끝] ---
             
             if is_correct:
