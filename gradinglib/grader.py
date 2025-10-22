@@ -1,3 +1,4 @@
+# gradinglib/grader.py
 import json, os, numpy as np, pandas as pd, inspect
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
@@ -43,20 +44,36 @@ class Grader:
             if correct is None:
                 feedback.append(f"{qid}: 오답 ❌ (정답 없음)")
                 continue
+            
             # 비교 로직: list/np.ndarray/float 등 유형별 비교
             is_correct = False
             try:
                 if isinstance(correct, np.ndarray):
                     student_array = np.array(student_answer)
                     is_correct = student_array.shape == correct.shape and np.allclose(student_array, correct)
+                
+                # [수정됨] 튜플/리스트 비교 로직
                 elif isinstance(correct, list):
-                    is_correct = np.allclose(student_answer, correct) if any(isinstance(x,float) for x in correct) else (student_answer == correct)
+                    # 1. 리스트에 float이 포함된 경우 (예: [0.1, 0.2])
+                    if any(isinstance(x,float) for x in correct):
+                        is_correct = np.allclose(student_answer, correct)
+                    # 2. 학생 답이 튜플이고 정답이 리스트인 경우 (예: Q2_01)
+                    elif isinstance(student_answer, tuple):
+                        is_correct = (list(student_answer) == correct)
+                    # 3. 그 외 (리스트 vs 리스트)
+                    else:
+                        is_correct = (student_answer == correct)
+                
+                # 그 외 (int, str 등)
                 else:
                     is_correct = (student_answer == correct)
+            
             except Exception:
-                pass
+                pass # 비교 중 오류 발생 시 is_correct = False 유지
+            
             if is_correct:
                 score += 1; feedback.append(f"{qid}: 정답 ✅")
             else:
                 feedback.append(f"{qid}: 오답 ❌")
+        
         return score, "\n".join(feedback)
